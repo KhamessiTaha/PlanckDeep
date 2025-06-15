@@ -1,5 +1,5 @@
 from src.dataset import CMBDataset
-from src.model import CMBClassifier
+from models import CMBClassifier
 from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
