@@ -1,0 +1,11 @@
+numpy
+matplotlib
+astropy
+healpy
+torch
+torchvision
+einops
+tqdm
+seaborn
+wandb
+plotly

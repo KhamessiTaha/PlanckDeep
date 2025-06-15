@@ -1,0 +1,26 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.so
+
+# Data & model files (don't push .fits, .npy, .pt, etc.)
+data/*
+!data/.gitkeep  # allow empty folder to be tracked
+models/*
+!models/.gitkeep
+
+# Notebooks with outputs (optional)
+**.ipynb_checkpoints
+notebooks/*-checkpoint.ipynb
+
+# Doc folder (if auto-generated)
+doc/*
+
+# Environment files / logs
+.env
+*.log
+wandb/
+*.sqlite3
+
+# VSCode settings (if using)
+.vscode/
