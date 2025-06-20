@@ -16,7 +16,7 @@ class EnhancedCMBDataset(Dataset):
         """
         # Load data
         self.patches = torch.tensor(patches).unsqueeze(1).float()
-        torch.tensor(labels).long()
+        self.labels = torch.tensor(labels).long()
         self.augment = augment
         self.normalize_patches = normalize_patches
         self.transform_strength = transform_strength
