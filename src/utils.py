@@ -30,7 +30,7 @@ class EarlyStopping:
             self.best_loss = val_loss
             self.wait = 0
             if self.restore_best_weights:
-                self.best_weights = model.state_dict().copy()
+                self.best_weights = {k: v.clone() for k, v in model.state_dict().items()}
         else:
             self.wait += 1
             if self.wait >= self.patience:
@@ -65,12 +65,13 @@ class LearningRateScheduler:
     def step(self, epoch, val_loss=None):
         if self.strategy == 'cosine':
             lr = self.eta_min + (self.initial_lr - self.eta_min) * (1 + np.cos(np.pi * epoch / self.T_max)) / 2
-        elif self.strategy == 'reduce_on_plateau':  # Fixed the variable name here
+        elif self.strategy == 'reduce_on_plateau':
             if val_loss is None:
                 raise ValueError("val_loss is required for reduce_on_plateau strategy")
             if val_loss < self.best_loss - self.threshold:
                 self.best_loss = val_loss
                 self.wait = 0
+                return  # No change in learning rate
             else:
                 self.wait += 1
                 if self.wait >= self.patience:
@@ -158,9 +159,10 @@ class MetricsTracker:
                 if len(pred_probs.shape) > 1 and pred_probs.shape[1] > 1:
                     # Use positive class probability
                     metrics['roc_auc'] = roc_auc_score(targets, pred_probs[:, 1])
+                    metrics['average_precision'] = average_precision_score(targets, pred_probs[:, 1])
                 else:
                     metrics['roc_auc'] = roc_auc_score(targets, pred_probs)
-                metrics['average_precision'] = average_precision_score(targets, pred_probs[:, 1] if len(pred_probs.shape) > 1 else pred_probs)
+                    metrics['average_precision'] = average_precision_score(targets, pred_probs)
             except:
                 metrics['roc_auc'] = 0.0
                 metrics['average_precision'] = 0.0
@@ -596,7 +598,7 @@ def create_data_loaders(train_dataset, val_dataset, test_dataset=None,
     
     return train_loader, val_loader
 
-def calculate_class_weights(labels, device):
+def calculate_class_weights(labels, device, num_classes=2):
     """Calculate class weights for imbalanced datasets"""
     import numpy as np
     from sklearn.utils.class_weight import compute_class_weight
@@ -604,34 +606,67 @@ def calculate_class_weights(labels, device):
     # Convert labels to numpy array if they're not already
     if isinstance(labels, list):
         labels = np.array(labels)
+    elif isinstance(labels, torch.Tensor):
+        labels = labels.cpu().numpy()
     
     # Get unique classes present in the data
-    classes = np.unique(labels)
+    classes_in_data = np.unique(labels)
     
-    # Ensure we include all possible classes (even if some are missing in this batch)
-    # For binary classification, we expect classes [0, 1]
-    all_classes = np.arange(2)  # or np.array([0, 1]) for binary classification
+    # Create array for all expected classes
+    all_classes = np.arange(num_classes)
     
-    # Calculate weights
-    weights = compute_class_weight('balanced', classes=all_classes, y=labels)
+    # Calculate weights only for classes present in data
+    weights_dict = {}
+    
+    if len(classes_in_data) == 1:
+        # Only one class present, assign equal weights
+        weights = np.ones(num_classes)
+    else:
+        # Calculate balanced weights for present classes
+        present_weights = compute_class_weight(
+            'balanced', 
+            classes=classes_in_data, 
+            y=labels
+        )
+        
+        # Map weights to all classes
+        weights = np.ones(num_classes)  # Default weight of 1.0
+        
+        for i, class_idx in enumerate(classes_in_data):
+            if class_idx < num_classes:
+                weights[class_idx] = present_weights[i]
     
     # Convert to tensor
     return torch.tensor(weights, dtype=torch.float32).to(device)
 
-def print_model_info(model, input_size=(1, 1, 128, 128)):
+def print_model_info(model, input_size=(1, 3, 224, 224)):
     """Print comprehensive model information"""
-    from models import get_model_summary, count_parameters
-    
     print("=" * 60)
     print(f"Model: {model.__class__.__name__}")
     print("=" * 60)
     
-    # Get model summary
-    summary = get_model_summary(model, input_size)
+    # Count parameters
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params_all = sum(p.numel() for p in model.parameters())
     
-    print(f"Total Parameters: {summary['total_parameters']:,}")
-    print(f"Input Shape: {summary['input_shape']}")
-    print(f"Output Shape: {summary['output_shape']}")
+    print(f"Total Trainable Parameters: {total_params:,}")
+    print(f"Total Parameters: {total_params_all:,}")
+    print(f"Input Shape: {input_size}")
+    
+    # Try to get output shape
+    try:
+        model.eval()
+        with torch.no_grad():
+            dummy_input = torch.randn(1, *input_size[1:])
+            dummy_output = model(dummy_input)
+            if isinstance(dummy_output, dict):
+                print("Output Shapes:")
+                for key, value in dummy_output.items():
+                    print(f"  {key}: {tuple(value.shape)}")
+            else:
+                print(f"Output Shape: {tuple(dummy_output.shape)}")
+    except Exception as e:
+        print(f"Could not determine output shape: {e}")
     
     # Memory estimation
     param_size = sum(p.numel() * p.element_size() for p in model.parameters())

@@ -9,21 +9,20 @@ class EnhancedCMBDataset(Dataset):
     def __init__(self, patches, labels, augment=True, normalize_patches=True, transform_strength=0.3):
         """
         Args:
-            patch_file (str): Path to .npy file containing CMB patches
-            label_file (str): Path to .npy file containing labels
+            patches: Array/tensor containing CMB patches
+            labels: Array/tensor containing labels
             augment (bool): Whether to apply data augmentation
             normalize_patches (bool): Whether to normalize each patch individually
+            transform_strength (float): Strength of augmentation transforms
         """
-        # Load data
-        self.patches = torch.tensor(patches).unsqueeze(1).float()
-        self.labels = torch.tensor(labels).long()
+        # Store parameters
         self.augment = augment
         self.normalize_patches = normalize_patches
         self.transform_strength = transform_strength
         
         # Convert to torch tensors
-        self.patches = torch.tensor(self.patches).unsqueeze(1).float()
-        self.labels = torch.tensor(self.labels).long()
+        self.patches = torch.tensor(patches).unsqueeze(1).float()
+        self.labels = torch.tensor(labels).long()
         
         # Additional normalization if requested
         if self.normalize_patches:
@@ -56,9 +55,9 @@ class EnhancedCMBDataset(Dataset):
         patch = self.patches[idx].clone()
         label = self.labels[idx]
         
-        # Data augmentation for CMB patches
+        # Apply augmentation
         if self.augment and torch.rand(1) > 0.5:
-            # Random rotation (90, 180, 270 degrees)
+            # Random rotation
             k = torch.randint(1, 4, (1,)).item()
             patch = torch.rot90(patch, k=k, dims=[1, 2])
             
@@ -68,14 +67,13 @@ class EnhancedCMBDataset(Dataset):
             if torch.rand(1) > 0.5:
                 patch = torch.flip(patch, dims=[2])
             
-            # Small random rotation (for more realistic augmentation)
-            if torch.rand(1) > 0.7:
-                # Add small gaussian noise (cosmic variance simulation)
-                noise_level = 0.01
-                noise = torch.randn_like(patch) * noise_level
+            # Add noise augmentation
+            if torch.rand(1) > 0.3:
+                noise = torch.randn_like(patch) * self.transform_strength * 0.1
                 patch = patch + noise
         
         return patch, label
+
 
 class MultiTaskCMBDataset(Dataset):
     """
@@ -84,9 +82,10 @@ class MultiTaskCMBDataset(Dataset):
     def __init__(self, patches, label_dict, augment=True):
         """
         Args:
-            patch_file (str): Path to .npy file containing CMB patches
-            label_files_dict (dict): Dictionary mapping task names to label file paths
-                e.g., {'temperature': 'temp_labels.npy', 'variance': 'var_labels.npy'}
+            patches: Array/tensor containing CMB patches
+            label_dict (dict): Dictionary mapping task names to label arrays
+                e.g., {'temperature': temp_labels, 'variance': var_labels}
+            augment (bool): Whether to apply data augmentation
         """
         self.patches = torch.tensor(patches).unsqueeze(1).float()
         self.augment = augment

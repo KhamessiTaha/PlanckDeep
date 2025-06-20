@@ -146,16 +146,12 @@ def prepare_datasets(args, device):
     if 'multitask' in args.models:
         # For multitask learning, we need to create synthetic secondary tasks
         # This is a simplified example - in practice, you'd have real secondary labels
-        secondary_labels = {
+        label_dict = {
+            'main': labels,
             'noise_level': np.random.randint(0, 3, len(labels)),  # Low, medium, high noise
             'field_strength': np.random.randint(0, 2, len(labels))  # Weak, strong field
         }
-        task_configs = {
-            'main': {'num_classes': args.num_classes},
-            'noise_level': {'num_classes': 3},
-            'field_strength': {'num_classes': 2}
-        }
-        full_dataset = MultiTaskCMBDataset(patches, labels, secondary_labels, task_configs)
+        full_dataset = MultiTaskCMBDataset(patches, label_dict)
     else:
         full_dataset = EnhancedCMBDataset(
             patches, labels,
@@ -242,7 +238,9 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     model = model.to(device)
     
     # Print model info
-    print_model_info(model)
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Model parameters: {total_params:,} total, {trainable_params:,} trainable")
     
     # Create criterion
     if model_type == 'multitask':
@@ -275,6 +273,8 @@ def train_single_model(model_type, args, train_loader, val_loader, device,
     
     # Setup trainer
     model_save_dir = os.path.join(exp_dir, 'checkpoints', model_type)
+    os.makedirs(model_save_dir, exist_ok=True)
+    
     task_names = ['main', 'noise_level', 'field_strength'] if model_type == 'multitask' else None
     
     trainer = ModelTrainer(
@@ -490,7 +490,7 @@ def create_performance_plot(comparison_data, exp_dir):
     
     plot_path = os.path.join(exp_dir, 'plots', 'model_comparison.png')
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()  # Close to free memory
 
 def main():
     """Main training function"""
