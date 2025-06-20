@@ -596,18 +596,27 @@ def create_data_loaders(train_dataset, val_dataset, test_dataset=None,
     
     return train_loader, val_loader
 
-def calculate_class_weights(labels, device='cpu'):
+def calculate_class_weights(labels, device):
     """Calculate class weights for imbalanced datasets"""
+    import numpy as np
     from sklearn.utils.class_weight import compute_class_weight
     
-    if isinstance(labels, torch.Tensor):
-        labels = labels.numpy()
+    # Convert labels to numpy array if they're not already
+    if isinstance(labels, list):
+        labels = np.array(labels)
     
-    all_classes = np.unique(labels)
-    classes = np.arange(all_classes.max() + 1)  # ensure all possible class indices are included
-    class_weights = compute_class_weight('balanced', classes=classes, y=labels)
+    # Get unique classes present in the data
+    classes = np.unique(labels)
     
-    return torch.tensor(class_weights, dtype=torch.float32, device=device)
+    # Ensure we include all possible classes (even if some are missing in this batch)
+    # For binary classification, we expect classes [0, 1]
+    all_classes = np.arange(2)  # or np.array([0, 1]) for binary classification
+    
+    # Calculate weights
+    weights = compute_class_weight('balanced', classes=all_classes, y=labels)
+    
+    # Convert to tensor
+    return torch.tensor(weights, dtype=torch.float32).to(device)
 
 def print_model_info(model, input_size=(1, 1, 128, 128)):
     """Print comprehensive model information"""
