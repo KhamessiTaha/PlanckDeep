@@ -603,7 +603,8 @@ def calculate_class_weights(labels, device='cpu'):
     if isinstance(labels, torch.Tensor):
         labels = labels.numpy()
     
-    classes = np.unique(labels)
+    all_classes = np.unique(labels)
+    classes = np.arange(all_classes.max() + 1)  # ensure all possible class indices are included
     class_weights = compute_class_weight('balanced', classes=classes, y=labels)
     
     return torch.tensor(class_weights, dtype=torch.float32, device=device)
