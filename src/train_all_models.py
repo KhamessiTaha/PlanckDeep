@@ -160,7 +160,7 @@ def prepare_datasets(args, device):
         full_dataset = EnhancedCMBDataset(
             patches, labels,
             transform_strength=0.3,
-            use_augmentation=True
+            augment=True
         )
     
     # Split dataset
