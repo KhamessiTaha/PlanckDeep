@@ -6,7 +6,7 @@ class EnhancedCMBDataset(Dataset):
     """
     Enhanced CMB Dataset with data augmentation and multiple label types
     """
-    def __init__(self, patch_file, label_file, augment=True, normalize_patches=True):
+    def __init__(self, patch_file, label_file, augment=True, normalize_patches=True, transform_strength=0.3):
         """
         Args:
             patch_file (str): Path to .npy file containing CMB patches
@@ -19,6 +19,7 @@ class EnhancedCMBDataset(Dataset):
         self.labels = np.load(label_file)
         self.augment = augment
         self.normalize_patches = normalize_patches
+        self.transform_strength = transform_strength
         
         # Convert to torch tensors
         self.patches = torch.tensor(self.patches).unsqueeze(1).float()
