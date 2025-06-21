@@ -248,6 +248,8 @@ class ModelTrainer:
                 # Handle binary case
                 if outputs.shape[-1] == 1:  # Binary output
                     targets = targets.float().view(-1, 1)
+                else:
+                    targets = targets.long()
                 total_loss = self.criterion(outputs, targets)
                 self.train_metrics.update(total_loss.item(), outputs, targets)
             self.optimizer.zero_grad()

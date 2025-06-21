@@ -140,9 +140,17 @@ def prepare_datasets(args, device):
     patches = np.load(args.patch_file)
     labels = np.load(args.label_file)
     
+    # Convert labels to appropriate type for binary classification
+    if args.binary_classification:
+        # Ensure labels are binary (0 or 1) and convert to float for BCEWithLogitsLoss
+        labels = (labels > 0).astype(np.float32)
+    else:
+        # For multi-class, ensure labels are long integers
+        labels = labels.astype(np.int64)
+    
     print(f"Loaded {len(patches)} patches with shape {patches.shape[1:]}")
     print(f"Number of classes: {len(np.unique(labels))}")
-    print(f"Class distribution: {np.bincount(labels)}")
+    print(f"Class distribution: {np.bincount(labels.astype(int))}")
     
     # Create dataset
     if 'multitask' in args.models:
@@ -190,7 +198,7 @@ def prepare_datasets(args, device):
     
     # Calculate class weights if requested
     class_weights = None
-    if args.use_class_weights:
+    if args.use_class_weights and not args.binary_classification:
         train_labels = []
         for _, label in train_dataset:
             if isinstance(label, dict):
@@ -199,6 +207,20 @@ def prepare_datasets(args, device):
                 train_labels.append(label)
         class_weights = calculate_class_weights(train_labels, device)
         print(f"Class weights: {class_weights}")
+    elif args.use_class_weights and args.binary_classification:
+        # For binary classification with BCEWithLogitsLoss, calculate pos_weight
+        train_labels = []
+        for _, label in train_dataset:
+            if isinstance(label, dict):
+                train_labels.append(label['main'])
+            else:
+                train_labels.append(label)
+        train_labels = np.array(train_labels)
+        pos_count = np.sum(train_labels)
+        neg_count = len(train_labels) - pos_count
+        pos_weight = neg_count / pos_count if pos_count > 0 else 1.0
+        class_weights = torch.tensor([pos_weight], device=device)
+        print(f"Positive class weight: {pos_weight:.4f}")
     
     return train_loader, val_loader, test_loader, class_weights
 
@@ -207,9 +229,13 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     print(f"\nCreating {model_type} model...")
     
     # Model configuration
-    model_config = {
-        'num_classes': 1 if args.binary_classification else args.num_classes,
-    }
+    if args.binary_classification:
+        model_config = {'num_classes': 1}
+    else:
+        model_config = {'num_classes': args.num_classes}
+    
+    # Get input shape from first batch (assuming 128x128 patches)
+    input_shape = (128, 128)
     
     # Only add dropout_rate for models that support it
     if model_type in ['improved_cnn', 'physics_informed', 'vision_transformer']:
@@ -217,10 +243,13 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     
     # Special configurations for specific models
     if model_type == 'physics_informed':
-        model_config['include_power_spectrum'] = True
+        model_config.update({
+            'include_power_spectrum': True,
+            'input_size': input_shape[0]  # Add input size for proper dimension calculation
+        })
     elif model_type == 'vision_transformer':
         model_config.update({
-            'img_size': 128,  # Assuming 128x128 patches
+            'img_size': input_shape[0],
             'patch_size': 16,
             'embed_dim': 384,  # Smaller for efficiency
             'depth': 6,
@@ -250,7 +279,7 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     # Create criterion
     if args.binary_classification:
         if class_weights is not None:
-            criterion = nn.BCEWithLogitsLoss(pos_weight=class_weights[1].view(1))
+            criterion = nn.BCEWithLogitsLoss(pos_weight=class_weights)
         else:
             criterion = nn.BCEWithLogitsLoss()
     else:
@@ -292,7 +321,8 @@ def train_single_model(model_type, args, train_loader, val_loader, device,
         optimizer=optimizer,
         device=device,
         save_dir=model_save_dir,
-        task_names=task_names
+        task_names=task_names,
+        binary_classification=args.binary_classification  # Pass binary classification flag
     )
     
     # Setup training components
@@ -355,7 +385,7 @@ def train_single_model(model_type, args, train_loader, val_loader, device,
     
     return model, results, history
 
-def evaluate_all_models(models_results, test_loader, device, exp_dir):
+def evaluate_all_models(models_results, test_loader, device, exp_dir, binary_classification):
     """Evaluate all trained models on test set"""
     print(f"\n{'='*60}")
     print("EVALUATING ALL MODELS ON TEST SET")
@@ -387,7 +417,8 @@ def evaluate_all_models(models_results, test_loader, device, exp_dir):
             test_loader=test_loader,
             device=device,
             task_names=task_names,
-            save_path=eval_save_path
+            save_path=eval_save_path,
+            binary_classification=binary_classification
         )
         
         # Store results
@@ -514,6 +545,7 @@ def main():
     exp_dir = create_experiment_dir(args.output_dir, args.experiment_name)
     
     print(f"Experiment directory: {exp_dir}")
+    print(f"Binary classification mode: {args.binary_classification}")
     
     # Save configuration
     config_path = os.path.join(exp_dir, 'config.json')
@@ -535,6 +567,8 @@ def main():
             
         except Exception as e:
             print(f"Error training {model_type}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             print(f"Skipping {model_type}...")
             continue
     
@@ -543,7 +577,7 @@ def main():
         return
     
     # Evaluate all models
-    test_results = evaluate_all_models(models_results, test_loader, device, exp_dir)
+    test_results = evaluate_all_models(models_results, test_loader, device, exp_dir, args.binary_classification)
     
     # Create comparison report
     comparison_data = create_comparison_report(test_results, exp_dir)
