@@ -44,6 +44,8 @@ def parse_arguments():
                        help='Validation split ratio')
     parser.add_argument('--test_split', type=float, default=0.1,
                        help='Test split ratio')
+    parser.add_argument('--binary_classification', action='store_true',
+                   help='Use binary classification mode')
     
     # Model arguments
     parser.add_argument('--models', nargs='+', 
@@ -206,7 +208,7 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     
     # Model configuration
     model_config = {
-        'num_classes': args.num_classes,
+        'num_classes': 1 if args.binary_classification else args.num_classes,
     }
     
     # Only add dropout_rate for models that support it
@@ -246,9 +248,11 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     print(f"Model parameters: {total_params:,} total, {trainable_params:,} trainable")
     
     # Create criterion
-    if model_type == 'multitask':
-        # For multitask, we'll handle the criterion in the trainer
-        criterion = nn.CrossEntropyLoss(weight=class_weights)
+    if args.binary_classification:
+        if class_weights is not None:
+            criterion = nn.BCEWithLogitsLoss(pos_weight=class_weights[1])
+        else:
+            criterion = nn.BCEWithLogitsLoss()
     else:
         criterion = nn.CrossEntropyLoss(weight=class_weights)
     

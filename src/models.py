@@ -39,7 +39,7 @@ class ImprovedCMBClassifier(nn.Module):
         self.fc1 = nn.Linear(512 * 4 * 4, 1024)
         self.fc2 = nn.Linear(1024, 512)
         self.fc3 = nn.Linear(512, 256)
-        self.fc4 = nn.Linear(256, num_classes)
+        self.fc4 = nn.Linear(256, 1 if num_classes == 2 else num_classes)
         
         # Initialize weights
         self._initialize_weights()
@@ -87,7 +87,8 @@ class ImprovedCMBClassifier(nn.Module):
         x = F.relu(self.fc3(x))
         x = self.dropout(x)
         x = self.fc4(x)
-        
+        if self.fc4.out_features == 1:  # Binary case
+            x = x.squeeze(1)  # Remove extra dimension
         return x
 
 class ResidualBlock(nn.Module):

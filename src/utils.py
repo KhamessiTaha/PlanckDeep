@@ -108,11 +108,22 @@ class MetricsTracker:
         if isinstance(targets, torch.Tensor):
             targets = targets.detach().cpu()
         
-        # Calculate accuracy
+        # Calculate accuracy - FIXED VERSION
         if len(predictions.shape) > 1 and predictions.shape[1] > 1:
+            # Multi-class classification - use argmax
             pred_classes = torch.argmax(predictions, dim=1)
         else:
-            pred_classes = (predictions > 0.5).float()
+            # Binary classification - apply sigmoid first if needed
+            if predictions.min() < 0 or predictions.max() > 1:
+                # These are logits, apply sigmoid
+                predictions = torch.sigmoid(predictions)
+            pred_classes = (predictions > 0.5).float().squeeze()
+        
+        # Ensure shapes match
+        if len(pred_classes.shape) > len(targets.shape):
+            pred_classes = pred_classes.squeeze()
+        elif len(pred_classes.shape) < len(targets.shape):
+            targets = targets.squeeze()
         
         accuracy = (pred_classes == targets).float().mean().item()
         self.metrics[task_name]['accuracies'].append(accuracy)
