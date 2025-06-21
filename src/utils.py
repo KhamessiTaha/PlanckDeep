@@ -180,10 +180,11 @@ class MetricsTracker:
         
         return metrics
 
+
 class ModelTrainer:
     """Comprehensive model trainer with advanced features"""
     def __init__(self, model, train_loader, val_loader, criterion, optimizer, 
-                 device, save_dir='checkpoints', task_names=None):
+                 device, save_dir='checkpoints', task_names=None, binary_classification=False):
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -192,6 +193,7 @@ class ModelTrainer:
         self.device = device
         self.save_dir = save_dir
         self.task_names = task_names or ['main']
+        self.binary_classification = binary_classification
         
         # Create save directory
         os.makedirs(save_dir, exist_ok=True)
@@ -235,7 +237,7 @@ class ModelTrainer:
                 total_loss = 0
                 for task_name in self.task_names:
                     if task_name in targets and task_name in outputs:
-                        if outputs[task_name].shape[-1] == 1:  # Binary output
+                        if self.binary_classification or outputs[task_name].shape[-1] == 1:  # Binary output
                             targets[task_name] = targets[task_name].float().view(-1, 1)
                         loss = self.criterion(outputs[task_name], targets[task_name])
                         total_loss += loss
@@ -246,12 +248,13 @@ class ModelTrainer:
                 outputs = self.model(data)
     
                 # Handle binary case
-                if outputs.shape[-1] == 1:  # Binary output
+                if self.binary_classification or outputs.shape[-1] == 1:  # Binary output
                     targets = targets.float().view(-1, 1)
                 else:
                     targets = targets.long()
                 total_loss = self.criterion(outputs, targets)
                 self.train_metrics.update(total_loss.item(), outputs, targets)
+            
             self.optimizer.zero_grad()
             total_loss.backward()
             
@@ -277,12 +280,20 @@ class ModelTrainer:
                     total_loss = 0
                     for task_name in self.task_names:
                         if task_name in targets and task_name in outputs:
+                            if self.binary_classification or outputs[task_name].shape[-1] == 1:
+                                targets[task_name] = targets[task_name].float().view(-1, 1)
                             loss = self.criterion(outputs[task_name], targets[task_name])
                             total_loss += loss
                             self.val_metrics.update(loss.item(), outputs[task_name], targets[task_name], task_name)
                 else:
                     targets = targets.to(self.device)
                     outputs = self.model(data)
+                    
+                    # Handle binary case
+                    if self.binary_classification or outputs.shape[-1] == 1:
+                        targets = targets.float().view(-1, 1)
+                    else:
+                        targets = targets.long()
                     total_loss = self.criterion(outputs, targets)
                     self.val_metrics.update(total_loss.item(), outputs, targets)
         
@@ -362,7 +373,6 @@ class ModelTrainer:
         print(f"Training completed in {total_time:.2f} seconds")
         
         return self.history
-
 # Visualization and evaluation utilities
 def plot_training_history(history, save_path=None):
     """Plot training history with multiple metrics"""
