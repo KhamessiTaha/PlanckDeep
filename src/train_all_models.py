@@ -321,8 +321,7 @@ def train_single_model(model_type, args, train_loader, val_loader, device,
         optimizer=optimizer,
         device=device,
         save_dir=model_save_dir,
-        task_names=task_names,
-        binary_classification=args.binary_classification  # Pass binary classification flag
+        task_names=task_names,# Pass binary classification flag
     )
     
     # Setup training components
