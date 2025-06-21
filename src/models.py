@@ -88,7 +88,7 @@ class ImprovedCMBClassifier(nn.Module):
         x = self.dropout(x)
         x = self.fc4(x)
         if self.fc4.out_features == 1:  # Binary case
-            x = x.squeeze(1)  # Remove extra dimension
+            return x.squeeze(1)  # Remove extra dimension
         return x
 
 class ResidualBlock(nn.Module):
@@ -196,7 +196,8 @@ class CMBResNet(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.dropout(x)
         x = self.fc(x)
-        
+        if self.fc.out_features == 1:  # Binary case
+            return x.squeeze(1)
         return x
 
 class PhysicsInformedCMBNet(nn.Module):
@@ -340,7 +341,8 @@ class PhysicsInformedCMBNet(nn.Module):
         
         # Final classification
         output = self.classifier(combined_features)
-        
+        if self.classifier[-1].out_features == 1:  # Binary case
+            return output.squeeze(1)
         return output
 
 class VisionTransformerCMB(nn.Module):

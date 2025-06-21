@@ -235,6 +235,8 @@ class ModelTrainer:
                 total_loss = 0
                 for task_name in self.task_names:
                     if task_name in targets and task_name in outputs:
+                        if outputs[task_name].shape[-1] == 1:  # Binary output
+                            targets[task_name] = targets[task_name].float().view(-1, 1)
                         loss = self.criterion(outputs[task_name], targets[task_name])
                         total_loss += loss
                         self.train_metrics.update(loss.item(), outputs[task_name], targets[task_name], task_name)
@@ -242,9 +244,12 @@ class ModelTrainer:
                 # Single task training
                 targets = targets.to(self.device)
                 outputs = self.model(data)
+    
+                # Handle binary case
+                if outputs.shape[-1] == 1:  # Binary output
+                    targets = targets.float().view(-1, 1)
                 total_loss = self.criterion(outputs, targets)
                 self.train_metrics.update(total_loss.item(), outputs, targets)
-            
             self.optimizer.zero_grad()
             total_loss.backward()
             

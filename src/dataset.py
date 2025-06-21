@@ -3,68 +3,72 @@ from torch.utils.data import Dataset
 import numpy as np
 
 class EnhancedCMBDataset(Dataset):
-    """
-    Enhanced CMB Dataset with data augmentation and multiple label types
-    """
-    def __init__(self, patches, labels, num_classes=2, augment=True, normalize_patches=True, transform_strength=0.3):
+    def __init__(self, patches, labels, num_classes=2, augment=True, 
+                 normalize_patches=True, transform_strength=0.3):
         """
         Args:
-            patches: Array/tensor containing CMB patches
-            labels: Array/tensor containing labels
-            num_classes (int): Number of classes (1 for regression, >1 for classification)
-            augment (bool): Whether to apply data augmentation
-            normalize_patches (bool): Whether to normalize each patch individually
-            transform_strength (float): Strength of augmentation transforms
+            num_classes: 1 for binary classification (using BCEWithLogitsLoss)
+                        >2 for multi-class classification
+                        Set to 0 for regression tasks
         """
         # Store parameters
         self.augment = augment
         self.normalize_patches = normalize_patches
         self.transform_strength = transform_strength
         self.num_classes = num_classes
+        self.is_regression = (num_classes == 0)
         
-        # Convert to torch tensors
+        # Convert patches to tensor
         if isinstance(patches, np.ndarray):
             self.patches = torch.from_numpy(patches).float()
         else:
-            self.patches = torch.tensor(patches).float()
+            self.patches = torch.as_tensor(patches).float()
             
-        # Add channel dimension if not present
-        if len(self.patches.shape) == 3:  # (N, H, W)
-            self.patches = self.patches.unsqueeze(1)  # (N, 1, H, W)
+        # Add channel dimension if needed
+        if len(self.patches.shape) == 3:
+            self.patches = self.patches.unsqueeze(1)  # [N, 1, H, W]
         
-        # Handle labels based on task type
+        # Convert and validate labels
         if isinstance(labels, np.ndarray):
-            labels = torch.from_numpy(labels)
+            self.labels = torch.from_numpy(labels)
         else:
-            labels = torch.tensor(labels)
+            self.labels = torch.as_tensor(labels)
             
-        # Convert labels to proper type
-        if num_classes == 1:  # Binary classification
-            self.labels = torch.tensor(labels).float()
-        else:
-            self.labels = torch.tensor(labels).long()
-
+        # Ensure proper label type and shape
+        if self.is_regression:
+            self.labels = self.labels.float()
+        elif num_classes == 1:  # Binary classification
+            self.labels = self.labels.float()
+            if self.labels.dim() > 1:
+                self.labels = self.labels.squeeze(-1)
+        else:  # Multi-class classification
+            self.labels = self.labels.long()
+            if self.labels.dim() > 1:
+                self.labels = self.labels.squeeze(-1)
+            
+            # Validate class indices
+            if (self.labels < 0).any() or (self.labels >= num_classes).any():
+                raise ValueError("Class indices must be in [0, num_classes-1]")
         
-        
-        # Additional normalization if requested
+        # Normalize if requested
         if self.normalize_patches:
             self._normalize_patches()
         
+        # Print statistics
         print(f"Dataset loaded: {len(self.patches)} patches")
         print(f"Patch shape: {self.patches[0].shape}")
         
-        # Print label statistics
-        if num_classes == 1:
-            print(f"Label statistics - Mean: {self.labels.mean():.4f}, Std: {self.labels.std():.4f}")
+        if self.is_regression:
+            print(f"Regression labels - Mean: {self.labels.mean():.4f}, Std: {self.labels.std():.4f}")
+        elif num_classes == 1:
+            print(f"Binary labels - Positive ratio: {self.labels.mean():.4f}")
         else:
             label_counts = torch.bincount(self.labels)
-            print(f"Label distribution: {label_counts}")
-            
-            # Check for class imbalance
+            print(f"Class distribution: {label_counts.tolist()}")
             if len(label_counts) >= 2:
                 imbalance_ratio = float(label_counts.max()) / float(label_counts.min())
                 if imbalance_ratio > 2.0:
-                    print(f"⚠️  Class imbalance detected: ratio = {imbalance_ratio:.2f}")
+                    print(f"⚠️ Class imbalance detected: ratio = {imbalance_ratio:.2f}")
     
     def _normalize_patches(self):
         """Normalize each patch to have zero mean and unit variance"""

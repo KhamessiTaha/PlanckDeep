@@ -250,7 +250,7 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     # Create criterion
     if args.binary_classification:
         if class_weights is not None:
-            criterion = nn.BCEWithLogitsLoss(pos_weight=class_weights[1])
+            criterion = nn.BCEWithLogitsLoss(pos_weight=class_weights[1].view(1))
         else:
             criterion = nn.BCEWithLogitsLoss()
     else:
