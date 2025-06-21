@@ -207,8 +207,11 @@ def create_model_and_optimizer(model_type, args, device, class_weights=None):
     # Model configuration
     model_config = {
         'num_classes': args.num_classes,
-        'dropout_rate': args.dropout_rate
     }
+    
+    # Only add dropout_rate for models that support it
+    if model_type in ['improved_cnn', 'physics_informed', 'vision_transformer']:
+        model_config['dropout_rate'] = args.dropout_rate
     
     # Special configurations for specific models
     if model_type == 'physics_informed':
@@ -362,9 +365,14 @@ def evaluate_all_models(models_results, test_loader, device, exp_dir):
         # Load best model weights
         best_model_path = os.path.join(exp_dir, 'checkpoints', model_type, 'best_model.pt')
         if os.path.exists(best_model_path):
-            checkpoint = torch.load(best_model_path, map_location=device)
-            model.load_state_dict(checkpoint['model_state_dict'])
-            print(f"Loaded best model from epoch {checkpoint.get('epoch', 'unknown')}")
+            try:
+                # Fix for the pickle error - use weights_only=False for now
+                checkpoint = torch.load(best_model_path, map_location=device, weights_only=False)
+                model.load_state_dict(checkpoint['model_state_dict'])
+                print(f"Loaded best model from epoch {checkpoint.get('epoch', 'unknown')}")
+            except Exception as e:
+                print(f"Warning: Could not load best model checkpoint: {e}")
+                print("Using current model state instead...")
         
         # Evaluate model
         task_names = ['main', 'noise_level', 'field_strength'] if model_type == 'multitask' else None
@@ -544,8 +552,9 @@ def main():
     print(f"Trained {len(models_results)} models: {list(models_results.keys())}")
     
     # Find best model
-    best_model = max(comparison_data, key=lambda x: float(x['Test Accuracy']))
-    print(f"Best performing model: {best_model['Model']} (Accuracy: {best_model['Test Accuracy']})")
+    if comparison_data:
+        best_model = max(comparison_data, key=lambda x: float(x['Test Accuracy']))
+        print(f"Best performing model: {best_model['Model']} (Accuracy: {best_model['Test Accuracy']})")
     
     print(f"\nExperiment completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
