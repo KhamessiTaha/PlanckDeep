@@ -209,7 +209,7 @@ class PhysicsInformedCMBNet(nn.Module):
     Physics-Informed Neural Network for CMB analysis
     Incorporates domain knowledge about CMB power spectra and angular correlations
     """
-    def __init__(self, num_classes=2, dropout_rate=0.3, include_power_spectrum=True):
+    def __init__(self, num_classes=2, dropout_rate=0.3, include_power_spectrum=True, input_size=None):
         super().__init__()
         
         self.include_power_spectrum = include_power_spectrum

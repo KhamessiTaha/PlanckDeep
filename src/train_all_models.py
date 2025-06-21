@@ -418,7 +418,6 @@ def evaluate_all_models(models_results, test_loader, device, exp_dir, binary_cla
             device=device,
             task_names=task_names,
             save_path=eval_save_path,
-            binary_classification=binary_classification
         )
         
         # Store results
