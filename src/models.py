@@ -12,6 +12,7 @@ class ImprovedCMBClassifier(nn.Module):
         super().__init__()
         
         self.input_size = input_size
+        self.num_classes = num_classes
         
         # Convolutional layers with batch normalization and residual connections
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5, padding=2)
@@ -35,11 +36,12 @@ class ImprovedCMBClassifier(nn.Module):
         # Dropout for regularization
         self.dropout = nn.Dropout(dropout_rate)
         
-        # Fully connected layers with skip connections
+        # Fully connected layers - FIXED for binary classification
         self.fc1 = nn.Linear(512 * 4 * 4, 1024)
         self.fc2 = nn.Linear(1024, 512)
         self.fc3 = nn.Linear(512, 256)
-        self.fc4 = nn.Linear(256, 1 if num_classes == 2 else num_classes)
+        # For binary classification, output 2 classes (not 1)
+        self.fc4 = nn.Linear(256, num_classes)
         
         # Initialize weights
         self._initialize_weights()
@@ -87,8 +89,8 @@ class ImprovedCMBClassifier(nn.Module):
         x = F.relu(self.fc3(x))
         x = self.dropout(x)
         x = self.fc4(x)
-        if self.fc4.out_features == 1:  # Binary case
-            return x.squeeze(1)  # Remove extra dimension
+        
+        # Return logits for both binary and multi-class
         return x
 
 class ResidualBlock(nn.Module):
@@ -151,6 +153,8 @@ class CMBResNet(nn.Module):
     def __init__(self, num_classes=2, block_counts=[2, 2, 2, 2], use_attention=True):
         super().__init__()
         
+        self.num_classes = num_classes
+        
         self.conv1 = nn.Conv2d(1, 64, 7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.maxpool = nn.MaxPool2d(3, stride=2, padding=1)
@@ -163,6 +167,7 @@ class CMBResNet(nn.Module):
         
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.dropout = nn.Dropout(0.3)
+        # FIXED: Always output num_classes for consistent loss computation
         self.fc = nn.Linear(512, num_classes)
         
         # Initialize weights
@@ -196,8 +201,7 @@ class CMBResNet(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.dropout(x)
         x = self.fc(x)
-        if self.fc.out_features == 1:  # Binary case
-            return x.squeeze(1)
+        
         return x
 
 class PhysicsInformedCMBNet(nn.Module):
@@ -209,6 +213,7 @@ class PhysicsInformedCMBNet(nn.Module):
         super().__init__()
         
         self.include_power_spectrum = include_power_spectrum
+        self.num_classes = num_classes
         
         # Standard CNN backbone for spatial features
         self.spatial_backbone = nn.Sequential(
@@ -256,7 +261,7 @@ class PhysicsInformedCMBNet(nn.Module):
         else:
             feature_size = 128 * 4 * 4  # Only physics features
         
-        # Final classification layers
+        # FIXED: Final classification layers with correct dimensions
         self.classifier = nn.Sequential(
             nn.Linear(feature_size, 512),
             nn.ReLU(),
@@ -267,6 +272,7 @@ class PhysicsInformedCMBNet(nn.Module):
             nn.Linear(256, 128),
             nn.ReLU(),
             nn.Dropout(dropout_rate),
+            # Always output num_classes for consistent loss computation
             nn.Linear(128, num_classes)
         )
     
@@ -311,17 +317,7 @@ class PhysicsInformedCMBNet(nn.Module):
         power_features = torch.stack(power_features_list)
         power_features = torch.log(power_features + 1e-10)  # Avoid log(0)
         
-        # Reduce to 64 features using linear transformation
-        power_features_reduced = power_features[:, :32]  # Take first 32 features
-        
-        # Pad to 64 features if needed
-        if power_features_reduced.shape[1] < 64:
-            padding = torch.zeros(batch_size, 64 - power_features_reduced.shape[1], device=device)
-            power_features_reduced = torch.cat([power_features_reduced, padding], dim=1)
-        else:
-            power_features_reduced = power_features_reduced[:, :64]
-        
-        return power_features_reduced
+        return power_features
     
     def forward(self, x):
         # Extract spatial features
@@ -341,8 +337,6 @@ class PhysicsInformedCMBNet(nn.Module):
         
         # Final classification
         output = self.classifier(combined_features)
-        if self.classifier[-1].out_features == 1:  # Binary case
-            return output.squeeze(1)
         return output
 
 class VisionTransformerCMB(nn.Module):
@@ -356,6 +350,7 @@ class VisionTransformerCMB(nn.Module):
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = (img_size // patch_size) ** 2
+        self.num_classes = num_classes
         
         # Patch embedding
         self.patch_embed = nn.Conv2d(1, embed_dim, kernel_size=patch_size, stride=patch_size)
@@ -439,7 +434,7 @@ class MultiTaskCMBNet(nn.Module):
             backbone_features = 512
         elif shared_backbone == 'cnn':
             self.backbone = self._build_cnn_backbone()
-            backbone_features = 256
+            backbone_features = 256 * 4 * 4  # Fixed calculation
         else:
             raise ValueError(f"Unknown backbone: {shared_backbone}")
         
