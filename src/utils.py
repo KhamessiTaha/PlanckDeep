@@ -703,3 +703,4 @@ def print_model_info(model, input_size=(1, 3, 224, 224)):
     
     print(f"Model Size: {total_size / 1024**2:.2f} MB")
     print("=" * 60)
+    
